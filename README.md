@@ -101,3 +101,38 @@ While the Vanilla RNN is our primary focus, we implemented the **LSTM** as a res
 
 ## 12. Conclusion
 This project successfully demonstrates the implementation and empirical analysis of recurrent neural networks for large-scale next-word prediction. By constructing a 100,000-sentence corpus with a 10,000-word vocabulary, we provided a challenging environment for the Vanilla RNN baseline. Our results confirm that while the RNN can learn basic word associations, it is severely limited by the vanishing gradient problem on sequences of length 20. The LSTM extension effectively mitigated these issues, proving the necessity of gated architectures for long-range dependency modeling. This study underscores the importance of gradient stability and architectural selection in sequence modeling tasks, fulfilling all academic requirements for the neural networks curriculum.
+
+## Academic Research Results
+
+ ` 
+[*] Updating model logic for maxlen=20...
+
+=================================================================
+             ACADEMIC RESEARCH REPORT: SEQUENTIAL MODELING
+=================================================================
+[EXPERIMENTAL SUMMARY]
+Tested Sequence Length: 20 words
+Vocabulary Size: 10000
+RNN Test Perplexity: 1808.04
+
+[THEORETICAL ANALYSIS: THE VANISHING GRADIENT]
+The Vanilla RNN exhibits significant performance degradation as 
+sequence length increases to 20 words. This is primarily 
+due to the Vanishing Gradient problem. During Backpropagation 
+Through Time (BPTT), the gradient is repeatedly multiplied by 
+the recurrent weight matrix. For a 20-word sequence, this 
+multiplicative process causes the gradient signal to decay 
+exponentially, effectively "forgetting" the early tokens in 
+the sentence. 
+
+[CONCLUSION]
+While Gradient Clipping (max_norm=1.0) stabilizes the training 
+and prevents weight explosion, it does not solve the fundamental 
+memory decay of the hidden state. In contrast, gated architectures 
+like LSTM maintain a 'Cell State' that allows gradients to bypass 
+multiplicative decay, explaining their superior performance on 
+longer syntactic structures.
+=================================================================
+
+[SUCCESS] model_update.py logic verified.
+ ` 
