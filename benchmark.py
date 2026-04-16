@@ -25,7 +25,7 @@ def benchmark_regime(name, min_len, max_len, device, cfg):
     pad_idx = word2idx[PAD_TOKEN]
     
     sentences = generate_sentences(
-        vocab_words, 10000, # Using 10k for faster benchmarking
+        vocab_words, 20000, # Increased for more robust results
         min_len, max_len, cfg["seed"])
 
     indexed = tokenise(sentences, word2idx)

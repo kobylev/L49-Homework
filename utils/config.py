@@ -7,7 +7,7 @@ UNK_TOKEN = "<UNK>"
 CONFIG: Dict = {
     # ── data ──────────────────────────────────────────────────────────────────
     "vocab_size":       10_000,   # unique words (excl. special tokens)
-    "num_sentences":    50_000,   # total synthetic sentences (slightly reduced for speed)
+    "num_sentences":    100_000,   # total synthetic sentences (increased to meet requirements)
     "min_sentence_len":     5,    # shortest sentence in words
     "max_sentence_len":    20,    # longest  sentence in words (increased as requested)
     "train_split":       0.80,    # fraction used for training

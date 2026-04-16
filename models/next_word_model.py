@@ -42,6 +42,9 @@ class NextWordModel(nn.Module):
             self.rnn = nn.LSTM(**shared_kwargs)
 
         # -- Output projection --
+        # The output layer size is exactly the vocabulary size.
+        # Softmax is applied during training via CrossEntropyLoss, 
+        # and explicitly during inference for probability distribution.
         self.fc = nn.Linear(hidden_dim, vocab_size)
 
         self._init_weights()
