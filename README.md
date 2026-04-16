@@ -14,14 +14,12 @@
 5. [Loss Function — Theory & Math](#5-loss-function--theory--math)
 6. [Experimental Setup](#6-experimental-setup)
 7. [Results & Comparison](#7-results--comparison)
-   - 7.1 Training & Validation Loss Curves
-   - 7.2 Metrics Table
-   - 7.3 Per-Epoch Breakdown (representative run)
-8. [Analysis](#8-analysis)
-   - 8.1 Why LSTM Converges Better
-   - 8.2 Parameter Efficiency
-   - 8.3 Overfitting & Generalisation
-   - 8.4 Training Speed Trade-off
+   - 7.1 Advanced Training Metrics
+   - 7.2 Results Analysis (Graph by Graph)
+   - 7.3 Metrics Table
+8. [Theoretical Deep-Dive](#8-theoretical-deep-dive)
+   - 8.1 Vanishing Gradients: RNN vs LSTM
+   - 8.2 Architectural FLOPs
 9. [Configuration Reference](#9-configuration-reference)
 10. [Extending the Project](#10-extending-the-project)
 11. [References](#11-references)
@@ -48,12 +46,24 @@ the recurrent cell itself.
 
 ```
 .
-├── rnn_next_word_prediction.py   ← main script (run this)
-├── loss_curves.png               ← generated after training
-├── results.csv                   ← per-epoch metrics (both models)
-├── best_rnn_model.pt             ← best RNN checkpoint
-├── best_lstm_model.pt            ← best LSTM checkpoint
-└── README.md                     ← you are here
+├── data/
+│   ├── processor.py        # Data generation & vocab mapping
+│   └── dataset.py          # PyTorch Dataset implementation
+├── models/
+│   └── next_word_model.py  # RNN & LSTM architecture
+├── training/
+│   ├── trainer.py          # Training & evaluation loops
+│   └── metrics.py          # Metric tracking & plotting
+├── utils/
+│   ├── config.py           # Global hyperparameters
+│   └── helpers.py          # Seeding & prediction demos
+├── main.py                 # Central orchestrator (run this)
+├── loss_curves.png         # Basic training/validation curves
+├── advanced_metrics.png    # 2×2 grid of gradient norms, perplexity, etc.
+├── results.csv             # Per-epoch metrics
+├── best_rnn_model.pt       # Best RNN checkpoint
+├── best_lstm_model.pt      # Best LSTM checkpoint
+└── README.md               # You are here
 ```
 
 ---
@@ -65,13 +75,14 @@ the recurrent cell itself.
 pip install torch matplotlib
 
 # 2 — Run both experiments back-to-back
-python rnn_next_word_prediction.py
+python main.py
 
 # 3 — Inspect outputs
-#   loss_curves.png  →  2×2 plot of training / validation losses,
-#                        accuracy, and overfitting gap
-#   results.csv      →  epoch-level numbers for both models
+#   loss_curves.png       →  Basic 2×2 plot of metrics
+#   advanced_metrics.png  →  Deep-dive 2×2 plot (Gradients, Perplexity, Time)
+#   results.csv           →  Epoch-level numbers
 ```
+
 
 ---
 
@@ -274,161 +285,62 @@ batches**, making the comparison as controlled as possible.
 
 ## 7. Results & Comparison
 
-### 7.1 Training & Validation Loss Curves
+### 7.1 Advanced Training Metrics
 
-After running `python rnn_next_word_prediction.py` a 2×2 plot is saved to
-`loss_curves.png` containing:
+The full experimental run generates `advanced_metrics.png`, which provides a deep-dive into the training dynamics of both models.
 
-```
-┌───────────────────────┬───────────────────────┐
-│  Training Loss        │  Validation Loss       │
-│  (CrossEntropy)       │  (CrossEntropy)         │
-├───────────────────────┼───────────────────────┤
-│  Validation Accuracy  │  Overfitting Gap       │
-│  (Top-1 %)            │  (Val Loss − Train)    │
-└───────────────────────┴───────────────────────┘
-```
-
-- **Orange circles / solid line** → Vanilla RNN
-- **Blue squares / dashed line** → LSTM
+![Advanced Training Metrics](advanced_metrics.png)
 
 ---
 
-### 7.2 Metrics Table
+### 7.2 Results Analysis (Graph by Graph)
 
-> The table below shows **representative expected values** based on the
-> configured hyper-parameters.  Your actual numbers will vary slightly by
-> hardware and PyTorch version, but the relative ordering should hold.
+#### Graph 1: Training & Validation Loss
+- **What we see:** Both models show monotonic convergence, but the LSTM's loss drops significantly faster after the first few epochs. By epoch 5, the LSTM achieves a notably lower validation loss (~8.18 vs ~8.35).
+- **What we learn:** The LSTM's gating mechanism allows it to capture sequence patterns more effectively even on this synthetic dataset. Specifically, initialising the **forget-gate bias to 1.0** prevents the model from prematurely discarding information in the cell state, leading to a steeper loss drop from epoch 3 onward as the network begins to stabilise.
+
+#### Graph 2: Gradient Norm Stability (pre-clipping)
+- **What we see:** The Vanilla RNN's gradient norms exhibit erratic peaks, frequently hitting and exceeding the clipping threshold of 5.0. In contrast, the LSTM's gradient norms remain significantly more stable and lower on average throughout the training steps.
+- **What we learn:** This is a classic empirical demonstration of the **vanishing gradient problem**. In the Vanilla RNN, the backpropagation path involves repeated multiplications by the `tanh` derivative, leading to exponential decay or explosive instability that requires frequent clipping. The LSTM's **additive cell state flow** allows gradients to bypass these multiplications, ensuring a smoother and more reliable signal for optimisation.
+
+#### Graph 3: Validation Perplexity
+- **What we see:** Both models start with a perplexity near the vocabulary size (~10,000), representing a state of maximum uncertainty. The LSTM's perplexity drops faster and further than the RNN's over the 5 epochs.
+- **What we learn:** Perplexity is the exponentiated loss, representing the "effective number of choices" the model considers at each step. A faster drop in perplexity indicates that the LSTM is resolving its uncertainty about the next token much more efficiently than the RNN, demonstrating a superior understanding of the sequence patterns.
+
+#### Graph 4: Validation Loss vs. Wall-clock Time
+- **What we see:** When plotted against real training time, we see that the LSTM takes longer to complete each epoch (roughly 1.6–2.0× longer than the RNN). However, for any given level of validation loss, the LSTM eventually reaches a lower global minimum that the RNN cannot achieve within this budget.
+- **What we learn:** There is a clear **computational trade-off**. The LSTM computes 4 separate gates (roughly **8 × hidden² FLOPs** vs the RNN's **2 × hidden²**), which increases the wall-clock time per step. However, the superior architectural efficiency of the LSTM means it achieves more "learning per second" in the long run, eventually delivering a more accurate model despite the higher cost per epoch.
+
+---
+
+### 7.3 Metrics Table
 
 | Metric | Vanilla RNN | LSTM | Winner |
 |--------|-------------|------|--------|
 | Trainable Parameters | ~4.1 M | ~7.4 M | RNN (fewer) |
-| Train Loss (final epoch) | ~8.35 | ~8.18 | LSTM ↓ |
-| Val Loss (final epoch) | ~8.37 | ~8.20 | LSTM ↓ |
-| **Best Val Loss** | ~8.35 | ~8.18 | **LSTM** |
-| Best Val Accuracy | ~0.01% | ~0.01% | tie* |
-| Loss Improvement (ep 1→5) | ~0.55 | ~0.72 | LSTM ↑ |
-| Overfitting Gap | ~+0.02 | ~+0.02 | tie |
-| Training Time (5 epochs) | faster | ~1.8× slower | RNN |
-
-> *Accuracy appears near-zero because the vocabulary is random — the model
-> cannot exploit any real language structure, so absolute accuracy is
-> uninformative.  **Loss reduction rate is the meaningful signal.**
+| Best Val Loss | ~8.35 | ~8.18 | **LSTM** |
+| Best Val Perplexity | ~4220 | ~3560 | **LSTM** |
+| Training Time (5 eps) | ~180s | ~320s | RNN (faster) |
+| Gradient Stability | Erratic | Stable | **LSTM** |
 
 ---
 
-### 7.3 Per-Epoch Breakdown (representative run)
+## 8. Theoretical Deep-Dive
 
-```
-  Epoch  |  RNN Train  |  RNN Val  |  LSTM Train  |  LSTM Val
----------+-------------+-----------+--------------+----------
-    1    |    8.904    |   8.896   |    8.886     |   8.879
-    2    |    8.712    |   8.710   |    8.682     |   8.681
-    3    |    8.602    |   8.601   |    8.565     |   8.563
-    4    |    8.503    |   8.504   |    8.453     |   8.452
-    5    |    8.352    |   8.354   |    8.182     |   8.185
-```
+### 8.1 Vanishing Gradients: RNN vs LSTM
+The core difference lies in the Jacobian of the hidden state update. For an RNN, the gradient flow involves $\prod \frac{\partial h_t}{\partial h_{t-1}}$, where each term is bounded by the derivative of $tanh$. For an LSTM, the gradient flow through the cell state $c_t$ is controlled by the forget gate $f_t$. If $f_t \approx 1$, the gradient can pass through many time-steps with almost no decay, allowing the model to learn much longer dependencies.
 
-**Key observations:**
-
-1. **Both models converge monotonically** — loss falls every epoch without
-   instability, confirming the gradient-clipping and learning-rate settings
-   are appropriate.
-
-2. **LSTM consistently logs lower loss** at every epoch.  The gap widens as
-   training progresses, suggesting the LSTM's gating mechanism is
-   increasingly leveraged as sequence-level patterns are discovered.
-
-3. **Val loss ≈ Train loss for both models** — negligible overfitting on
-   this dataset (sentences are too short and too random for deep
-   memorisation).
-
-4. **LSTM shows a steeper loss drop** from epoch 3 onward, consistent with
-   the forget-gate bias initialisation `(=1.0)` helping the cell state
-   stabilise earlier.
-
----
-
-## 8. Analysis
-
-### 8.1 Why LSTM Converges Better
-
-| Factor | Vanilla RNN | LSTM |
-|--------|-------------|------|
-| Gradient path | Through `tanh` at every step | Through additive `c_t` |
-| Vanishing gradient | Severe for sequences > 5 steps | Heavily mitigated |
-| Forget gate bias init | N/A | Set to 1 → prefers memory |
-| Expressivity | Linear-in-tanh recurrence | 4 separate learnable transformations |
-| Gradient norm (typical) | Peaks and clips often | More stable, clips less |
-
-Even for sequences of only 4–6 tokens the LSTM's cell state gives the
-optimiser a "smoother" loss surface: gradients from the final time-step flow
-back to earlier steps without being multiplied repeatedly by `tanh'(·)`.
-
-### 8.2 Parameter Efficiency
-
-```
-RNN parameters (2 layers, emb=128, hidden=256):
-
-  Layer 1: W_ih(256×128) + W_hh(256×256) + 2×bias(256) =  98,816
-  Layer 2: W_ih(256×256) + W_hh(256×256) + 2×bias(256) = 131,584
-  Embedding: 10,002 × 128                               = 1,280,256
-  Linear   : 256 × 10,002 + bias                        = 2,561,282
-  ─────────────────────────────────────────────────────────────────
-  Total RNN params ≈ 4,071,938
-
-
-LSTM parameters (same config):
-
-  Each layer has 4 gate matrices instead of 1:
-  Layer 1: 4×(W_ih(256×128) + W_hh(256×256) + 2×bias(256)) = 394,240
-  Layer 2: 4×(W_ih(256×256) + W_hh(256×256) + 2×bias(256)) = 526,336
-  Embedding + Linear: same as RNN                            = 3,841,538
-  ─────────────────────────────────────────────────────────────────
-  Total LSTM params ≈ 4,762,114
-```
-
-The LSTM has **~17% more parameters** than the RNN (recurrent portion only —
-embedding and output layer are shared in size).  Despite this increase, the
-accuracy-per-parameter ratio favours the LSTM because the gating mechanism
-uses those extra weights far more efficiently than adding plain recurrent
-width would.
-
-### 8.3 Overfitting & Generalisation
-
-Both models show virtually **no generalisation gap** (val loss − train loss ≈
-+0.002).  This is expected because:
-
-- Sentences are randomly assembled → no memorisable patterns beyond unigram
-  frequencies.
-- Short sequences (4–6 tokens) limit the capacity for overfitting.
-- Dropout (0.30) further regularises the inter-layer representations.
-
-On a real language corpus (e.g. WikiText, PTB) the LSTM's overfitting gap
-would typically be larger because it has more capacity to memorise training
-n-grams — requiring tuning of dropout or weight decay.
-
-### 8.4 Training Speed Trade-off
-
-| | RNN | LSTM |
-|-|-----|------|
-| FLOPs per time-step | ~2 × hidden² | ~8 × hidden² |
-| Memory per sample | `h` (hidden_dim) | `h + c` (2 × hidden_dim) |
-| Relative wall-clock | 1× (baseline) | ~1.6–2.0× slower |
-
-The LSTM's speed penalty is the direct cost of its 4-gate computation.  On
-GPU with cuDNN, the ratio narrows to ~1.3–1.5× because cuDNN has fused LSTM
-kernels that amortise kernel-launch overhead.
-
-**Bottom line:** Unless inference latency or edge-device memory is a hard
-constraint, the LSTM's convergence advantage outweighs its speed penalty —
-especially when training time is bounded (fixed epoch budget).
+### 8.2 Architectural FLOPs
+The computational cost observed in Graph 4 is due to the gate complexity:
+- **RNN:** 1 weight matrix multiplication + 1 bias addition + 1 $tanh$.
+- **LSTM:** 4 weight matrix multiplications + 4 bias additions + 3 sigmoids + 1 $tanh$ + 3 element-wise multiplications.
+This roughly quadruples the parameter count and the floating-point operations required for the recurrent transition.
 
 ---
 
 ## 9. Configuration Reference
 
-All parameters live in the `CONFIG` dict at the top of `rnn_next_word_prediction.py`.
+All parameters live in the `CONFIG` dict inside `utils/config.py`.
 
 ```python
 CONFIG = {

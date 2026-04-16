@@ -1,0 +1,6 @@
+{
+  "general": {
+    "enableNotifications": true,
+    "defaultApprovalMode": "auto_edit"
+  }
+}
