@@ -52,7 +52,7 @@ This research explores the performance boundaries of **Vanilla Recurrent Neural 
 ## 5. Mathematical Evaluation: Perplexity
 We utilize **Perplexity ($PP$)** as our primary metric, defined as the exponentiated average cross-entropy loss:
 
-$$PP(S) = P(w_{1}, w_{2}, \dots, w_{N})^{-\frac{1}{N}} = \exp\left( -\frac{1}{N} \sum_{i=1}^{N} \log P(w_{i} \mid w_{<i}) \right)$$
+
 
 Perplexity represents the "weighted branching factor" of the model. A $PP$ of 10,000 indicates the model is as confused as a uniform random guess, while a lower $PP$ signifies a more deterministic predictive capability.
 
@@ -94,3 +94,18 @@ Since the spectral radius often leads to values $<1$, the signal decays exponent
 - Hochreiter & Schmidhuber (1997). **Long Short-Term Memory.**
 - Elman (1990). **Finding Structure in Time.**
 - PyTorch Documentation: `nn.RNN`, `nn.LSTM`.
+Here is the broken text of my README.md file for the RNN Next Word Prediction project. It currently throws a 'Extra open brace or missing close brace' error, breaks the rendering, and is missing the performance comparisons and graphs.
+
+Please rewrite and fix this README to meet high academic standards.
+
+Requirements for the fix:
+
+Fix Formatting Errors: Carefully fix all math syntax errors. Ensure proper use of inline math and display math delimiters without unbalanced braces.
+
+Restore Visuals: Include standard Markdown image syntax for the graphs (e.g., ![Loss Comparison](comparison_results.png)).
+
+Academic Structure: Organize the README logically with clear headings: Abstract, Dataset Generation, Preprocessing, Model Architecture (RNN), Training Configuration, and Research & Results (Comparing 5-7 vs. 20 words).
+
+Deepen the Analysis: In the Results section, properly articulate the Vanishing Gradient problem using correct mathematical notation, and explain the Time and Space Complexity differences when increasing the sequence length.
+
+Please output ONLY the raw valid Markdown code for the fixed README so I can copy-paste it directly.ס
