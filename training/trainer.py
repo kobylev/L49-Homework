@@ -55,12 +55,31 @@ def train_one_epoch(model:           NextWordModel,
 
     return total_loss / total_n
 
+class EarlyStopping:
+    """Early stops the training if validation loss doesn't improve after a given patience."""
+    def __init__(self, patience: int = 3, min_delta: float = 0.0):
+        self.patience  = patience
+        self.min_delta = min_delta
+        self.counter   = 0
+        self.best_loss = float("inf")
+        self.early_stop = False
+
+    def __call__(self, val_loss: float) -> bool:
+        if val_loss < self.best_loss - self.min_delta:
+            self.best_loss = val_loss
+            self.counter   = 0
+        else:
+            self.counter += 1
+            if self.counter >= self.patience:
+                self.early_stop = True
+        return self.early_stop
+
 @torch.no_grad()
 def evaluate(model:     NextWordModel,
              loader:    DataLoader,
              criterion: nn.Module,
-             device:    torch.device) -> Tuple[float, float]:
-    """Validation pass.  Returns (mean_loss, top-1_accuracy)."""
+             device:    torch.device) -> Tuple[float, float, float]:
+    """Validation pass.  Returns (mean_loss, top-1_accuracy, perplexity)."""
     model.eval()
     total_loss, total_correct, total_n = 0.0, 0, 0
 
@@ -68,11 +87,17 @@ def evaluate(model:     NextWordModel,
         inputs  = inputs.to(device)
         targets = targets.to(device)
         logits, _ = model(inputs)
-        total_loss    += criterion(logits, targets).item() * inputs.size(0)
+        
+        loss = criterion(logits, targets)
+        total_loss    += loss.item() * inputs.size(0)
         total_correct += (logits.argmax(dim=-1) == targets).sum().item()
         total_n       += inputs.size(0)
 
-    return total_loss / total_n, total_correct / total_n
+    avg_loss = total_loss / total_n
+    avg_acc  = total_correct / total_n
+    perplexity = math.exp(avg_loss)
+
+    return avg_loss, avg_acc, perplexity
 
 def run_experiment(rnn_type:     str,
                    train_loader: DataLoader,
@@ -106,6 +131,9 @@ def run_experiment(rnn_type:     str,
     criterion = nn.CrossEntropyLoss(ignore_index=pad_idx)
     optimiser = torch.optim.Adam(model.parameters(), lr=cfg["learning_rate"])
 
+    # Initialize Early Stopping
+    early_stopping = EarlyStopping(patience=cfg.get("patience", 3))
+
     result = ExperimentResult(
         rnn_type     = rnn_type,
         num_params   = model.count_params(),
@@ -126,20 +154,20 @@ def run_experiment(rnn_type:     str,
             device, epoch, cfg["grad_clip"], cfg["log_every_n_batches"],
             step_grad_norms=result.step_grad_norms)
 
-        val_loss, val_acc = evaluate(model, val_loader, criterion, device)
+        val_loss, val_acc, val_perp = evaluate(model, val_loader, criterion, device)
         ep_time = time.time() - ep_start
         cumulative_time += ep_time
 
         result.train_losses.append(train_loss)
         result.val_losses.append(val_loss)
         result.val_accs.append(val_acc)
-        result.val_perplexities.append(math.exp(val_loss))
+        result.val_perplexities.append(val_perp)
         result.wall_clock_times.append(cumulative_time)
 
         print(f"\n  ► [{rnn_type}] Epoch {epoch} | "
               f"train_loss={train_loss:.4f}  "
               f"val_loss={val_loss:.4f}  "
-              f"val_perp={math.exp(val_loss):.2f}  "
+              f"val_perp={val_perp:.2f}  "
               f"time={ep_time:.1f}s")
 
         if val_loss < best_val_loss:
@@ -147,7 +175,13 @@ def run_experiment(rnn_type:     str,
             torch.save(model.state_dict(), f"best_{rnn_type.lower()}_model.pt")
             print(f"  ✓ New best {rnn_type} model saved.")
 
+        # Check Early Stopping
+        if early_stopping(val_loss):
+            print(f"\n  [Early Stopping] No improvement in validation loss for {early_stopping.patience} epochs. Stopping...")
+            break
+
         print_memory_usage(f"{rnn_type} end-of-epoch {epoch}")
 
     result.train_time_s = time.time() - t_start
     return result, model
+
