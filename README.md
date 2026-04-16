@@ -107,13 +107,15 @@ This project successfully demonstrates the implementation and empirical analysis
  ` 
 [*] Updating model logic for maxlen=20...
 
+## Latest Execution Results & Research Analysis
+```text
 =================================================================
-             ACADEMIC RESEARCH REPORT: SEQUENTIAL MODELING
+               ACADEMIC RESEARCH REPORT: SEQUENTIAL MODELING
 =================================================================
 [EXPERIMENTAL SUMMARY]
 Tested Sequence Length: 20 words
 Vocabulary Size: 10000
-RNN Test Perplexity: 1808.04
+RNN Test Perplexity: 1808.04 
 
 [THEORETICAL ANALYSIS: THE VANISHING GRADIENT]
 The Vanilla RNN exhibits significant performance degradation as 
@@ -133,6 +135,3 @@ like LSTM maintain a 'Cell State' that allows gradients to bypass
 multiplicative decay, explaining their superior performance on 
 longer syntactic structures.
 =================================================================
-
-[SUCCESS] model_update.py logic verified.
- ` 
