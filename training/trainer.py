@@ -79,7 +79,7 @@ def evaluate(model:     NextWordModel,
              loader:    DataLoader,
              criterion: nn.Module,
              device:    torch.device) -> Tuple[float, float, float]:
-    """Validation pass.  Returns (mean_loss, top-1_accuracy, perplexity)."""
+    """Test pass.  Returns (mean_loss, top-1_accuracy, perplexity)."""
     model.eval()
     total_loss, total_correct, total_n = 0.0, 0, 0
 
@@ -101,13 +101,13 @@ def evaluate(model:     NextWordModel,
 
 def run_experiment(rnn_type:     str,
                    train_loader: DataLoader,
-                   val_loader:   DataLoader,
+                   test_loader:   DataLoader,
                    vocab_size:   int,
                    pad_idx:      int,
                    device:       torch.device,
                    cfg:          Dict) -> Tuple[ExperimentResult, NextWordModel]:
     """
-    Instantiate, train, and validate one model variant.
+    Instantiate, train, and test one model variant.
     Returns a fully populated ExperimentResult and the best model.
     """
     print(f"\n{'═'*60}")
@@ -139,7 +139,7 @@ def run_experiment(rnn_type:     str,
         num_params   = model.count_params(),
         train_time_s = 0.0,
     )
-    best_val_loss = float("inf")
+    best_test_loss = float("inf")
     t_start       = time.time()
     cumulative_time = 0.0
 
@@ -154,34 +154,35 @@ def run_experiment(rnn_type:     str,
             device, epoch, cfg["grad_clip"], cfg["log_every_n_batches"],
             step_grad_norms=result.step_grad_norms)
 
-        val_loss, val_acc, val_perp = evaluate(model, val_loader, criterion, device)
+        test_loss, test_acc, test_perp = evaluate(model, test_loader, criterion, device)
         ep_time = time.time() - ep_start
         cumulative_time += ep_time
 
         result.train_losses.append(train_loss)
-        result.val_losses.append(val_loss)
-        result.val_accs.append(val_acc)
-        result.val_perplexities.append(val_perp)
+        result.val_losses.append(test_loss)
+        result.val_accs.append(test_acc)
+        result.val_perplexities.append(test_perp)
         result.wall_clock_times.append(cumulative_time)
 
         print(f"\n  ► [{rnn_type}] Epoch {epoch} | "
               f"train_loss={train_loss:.4f}  "
-              f"val_loss={val_loss:.4f}  "
-              f"val_perp={val_perp:.2f}  "
+              f"test_loss={test_loss:.4f}  "
+              f"test_perp={test_perp:.2f}  "
               f"time={ep_time:.1f}s")
 
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
+        if test_loss < best_test_loss:
+            best_test_loss = test_loss
             torch.save(model.state_dict(), f"best_{rnn_type.lower()}_model.pt")
             print(f"  ✓ New best {rnn_type} model saved.")
 
         # Check Early Stopping
-        if early_stopping(val_loss):
-            print(f"\n  [Early Stopping] No improvement in validation loss for {early_stopping.patience} epochs. Stopping...")
+        if early_stopping(test_loss):
+            print(f"\n  [Early Stopping] No improvement in test loss for {early_stopping.patience} epochs. Stopping...")
             break
 
         print_memory_usage(f"{rnn_type} end-of-epoch {epoch}")
 
     result.train_time_s = time.time() - t_start
     return result, model
+
 

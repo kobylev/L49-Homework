@@ -55,34 +55,35 @@ def main() -> None:
     indexed = tokenise(sentences, word2idx)
     print_memory_usage("After tokenisation")
 
-    # 3. Dataset Preparation
+    # 3. Dataset Preparation ──
     print("\n── Step 3 : Dataset Preparation ──")
     max_seq_len = cfg["max_sentence_len"] - 1
     pad_idx     = word2idx[PAD_TOKEN]
 
     full_ds    = NextWordDataset(indexed, pad_idx, max_seq_len)
     train_size = int(len(full_ds) * cfg["train_split"])
-    val_size   = len(full_ds) - train_size
+    test_size   = len(full_ds) - train_size
 
-    train_ds, val_ds = random_split(
-        full_ds, [train_size, val_size],
+    train_ds, test_ds = random_split(
+        full_ds, [train_size, test_size],
         generator=torch.Generator().manual_seed(cfg["seed"]))
 
-    print(f"[Data]  Total={len(full_ds):,}  Train={train_size:,}  Val={val_size:,}\n")
+    print(f"[Data]  Total={len(full_ds):,}  Train={train_size:,}  Test={test_size:,}\n")
 
     train_loader = DataLoader(train_ds, batch_size=cfg["batch_size"],
                               shuffle=True, num_workers=0,
                               pin_memory=(device.type == "cuda"))
-    val_loader   = DataLoader(val_ds, batch_size=cfg["batch_size"] * 2,
+    test_loader   = DataLoader(test_ds, batch_size=cfg["batch_size"] * 2,
                               shuffle=False, num_workers=0,
                               pin_memory=(device.type == "cuda"))
 
     # 4. Run Experiments
     rnn_result, rnn_model = run_experiment(
-        "RNN", train_loader, val_loader, actual_vocab_size, pad_idx, device, cfg)
+        "RNN", train_loader, test_loader, actual_vocab_size, pad_idx, device, cfg)
 
     lstm_result, lstm_model = run_experiment(
-        "LSTM", train_loader, val_loader, actual_vocab_size, pad_idx, device, cfg)
+        "LSTM", train_loader, test_loader, actual_vocab_size, pad_idx, device, cfg)
+
 
     results = [rnn_result, lstm_result]
 
