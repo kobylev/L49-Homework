@@ -52,16 +52,16 @@ This research explores the performance boundaries of **Vanilla Recurrent Neural 
 ## 5. Mathematical Evaluation: Perplexity
 We utilize **Perplexity ($PP$)** as our primary metric, defined as the exponentiated average cross-entropy loss:
 
-$$PP(S) = P(w_1, w_2, ..., w_N)^{-\frac{1}{N}} = \exp\left( -\frac{1}{N} \sum_{i=1}^{N} \log P(w_i | w_{<i}) \right)$$
+$$PP(S) = P(w_{1}, w_{2}, \dots, w_{N})^{-\frac{1}{N}} = \exp\left( -\frac{1}{N} \sum_{i=1}^{N} \log P(w_{i} \mid w_{<i}) \right)$$
 
 Perplexity represents the "weighted branching factor" of the model. A $PP$ of 10,000 indicates the model is as confused as a uniform random guess, while a lower $PP$ signifies a more deterministic predictive capability.
 
 ---
 
 ## 6. The Vanishing Gradient Problem
-In a SimpleRNN, the gradient $\frac{\partial \mathcal{L}}{\partial h_0}$ involves repeated multiplications by the weight matrix $W_{hh}$ and the derivative of the activation function ($\tanh'$). For sequences of length $T=20$:
+In a SimpleRNN, the gradient $\frac{\partial \mathcal{L}}{\partial h_{0}}$ involves repeated multiplications by the weight matrix $W_{hh}$ and the derivative of the activation function ($\tanh'$). For sequences of length $T=20$:
 
-$$\frac{\partial \mathcal{L}}{\partial h_0} = \frac{\partial \mathcal{L}}{\partial h_T} \prod_{t=1}^{T} \frac{\partial h_t}{\partial h_{t-1}}$$
+$$\frac{\partial \mathcal{L}}{\partial h_{0}} = \frac{\partial \mathcal{L}}{\partial h_{T}} \prod_{t=1}^{T} \frac{\partial h_{t}}{\partial h_{t-1}}$$
 
 Since the spectral radius often leads to values $<1$, the signal decays exponentially. The **LSTM** resolves this via **Gating Mechanisms** (Input, Forget, and Output gates) and an additive **Cell State**, allowing context to survive across all 20 tokens.
 
