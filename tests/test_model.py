@@ -10,6 +10,26 @@ def test_rnn_output_shape():
     logits, _ = model(x)
     assert logits.shape == (batch_size, vocab_size)
 
+def test_softmax_sums_to_one():
+    vocab_size = 100
+    model = NextWordModel(vocab_size, 16, 32, 1, 0.1, 0, "RNN")
+    x = torch.randint(0, vocab_size, (1, 5))
+    logits, _ = model(x)
+    probs = torch.softmax(logits, dim=-1)
+    assert torch.allclose(probs.sum(dim=-1), torch.tensor([1.0]))
+
+def test_hidden_state_persistence():
+    vocab_size = 100
+    model = NextWordModel(vocab_size, 16, 32, 1, 0.1, 0, "RNN")
+    x1 = torch.randint(0, vocab_size, (1, 1))
+    x2 = torch.randint(0, vocab_size, (1, 1))
+    
+    _, h1 = model(x1)
+    _, h2 = model(x2, h1)
+    
+    # h2 should be different from h1 (unless by extreme luck)
+    assert not torch.equal(h1, h2)
+
 def test_lstm_vs_rnn_same_interface():
     batch_size = 8
     seq_len = 5

@@ -1,6 +1,24 @@
 # RNN Next-Word Prediction Homework
 
-This project explores RNN and LSTM architectures for next-word prediction on a structured synthetic dataset.
+This project explores RNN and LSTM architectures for next-word prediction on a structured synthetic dataset. By moving from a random phoneme-based dataset to a structured grammar, we demonstrate how sequential models learn dependencies.
+
+## Setup & Usage
+
+### macOS / Linux
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+$env:PYTHONPATH="."; python scripts/run_all_experiments.py
+```
+
+### Windows
+```powershell
+python -m venv venv
+.\venv\Scripts\activate
+pip install -r requirements.txt
+$env:PYTHONPATH="."; python scripts/run_all_experiments.py
+```
 
 ## Project Structure
 
@@ -18,40 +36,34 @@ L49-Homework/
 │   └── evaluate.py          # Evaluation metrics
 ├── scripts/
 │   ├── run_experiment.py    # Run a single experiment
-│   └── run_all_experiments.py # Run the full suite
-├── tests/                   # Comprehensive pytest suite
-├── notebooks/               # For post-run analysis
+│   ├── run_all_experiments.py # Run the full suite
+├── tests/                   # Comprehensive pytest suite (17 tests)
 └── output/
     ├── models/              # Saved .pt checkpoints
     ├── plots/               # Loss and Accuracy curves
     └── results.csv          # Consolidated metrics
 ```
 
-## How to Run
+## Motivation: Fixing the Dataset
 
-1. **Install Dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-2. **Run Tests**:
-   ```bash
-   $env:PYTHONPATH="."; pytest tests/ -v
-   ```
-
-3. **Run All Experiments**:
-   ```bash
-   $env:PYTHONPATH="."; python scripts/run_all_experiments.py
-   ```
-
-## Motivation: Fixing Overfitting
-
-The original project used a purely random dataset, making it impossible for the model to learn meaningful transitions. This resulted in near-zero accuracy and high test loss.
-
-**Solution**: We introduced a structured grammar generator in `src/preprocessing.py`. It uses word clusters (themes) to create predictable patterns (e.g., specific subjects often appearing with specific verbs). This allows the RNN to learn sequential dependencies, bringing test loss down significantly.
+The original random dataset made learning impossible (accuracy ~0%). We implemented a structured grammar:
+- **Pattern**: `subject + verb + object [+ modifier]`
+- **Determinism**: Verbs and objects are tied to specific subjects via index-based mapping.
+- **Result**: Models can now achieve near 100% accuracy with sufficient window size.
 
 ## Key Findings
 
-- **RNN vs. LSTM**: LSTMs generally handle longer sequences and larger windows better due to the gating mechanism which mitigates vanishing gradients.
-- **Window Size**: Increasing the window size allows the model to capture more context, but requires more data and training time to generalize.
-- **Structured Data**: Sequential models require some level of statistical regularity in the data to learn effectively.
+- **Window Size Impact**: With `window=1`, the model experiences ambiguity when multiple subjects share the same verb. `window=2` resolves this by providing the subject context, leading to 100% accuracy.
+- **LSTM vs. RNN**: Both perform exceptionally well on this structured task, but LSTM shows slightly better stability on longer sequences (`dataset_type=long`).
+- **Loss Improvement**: Test loss dropped from the random baseline of ~9.2 to near 0.0 for most configurations.
+
+## Visualizations
+
+### RNN Window 2 (Short)
+![RNN Window 2](output/plots/RNN_2_short.png)
+
+### LSTM Window 2 (Short)
+![LSTM Window 2](output/plots/LSTM_2_short.png)
+
+### LSTM Window 2 (Long)
+![LSTM Window 2 Long](output/plots/LSTM_2_long.png)

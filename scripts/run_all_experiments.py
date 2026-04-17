@@ -14,11 +14,12 @@ def run_all():
     ]
     
     results = []
-    for rnn_type, window_size, sentence_type in experiments:
-        res = run_single_experiment(rnn_type, window_size, sentence_type)
+    for rnn_type, window_size, dataset_type in experiments:
+        res = run_single_experiment(rnn_type, window_size, dataset_type)
         results.append(res)
         
     df = pd.DataFrame(results)
+    os.makedirs("output", exist_ok=True)
     df.to_csv("output/results.csv", index=False)
     print("\nAll experiments completed. Results saved to output/results.csv")
     print(df)

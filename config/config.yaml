@@ -3,9 +3,9 @@ data:
   num_sentences: 100000
   short_sentence_len: [5, 7]
   long_sentence_len: [15, 20]
-  train_ratio: 0.8
-  val_ratio: 0.1
-  test_ratio: 0.1
+  train_ratio: 0.80
+  val_ratio: 0.10
+  test_ratio: 0.10
   seed: 42
 
 model:

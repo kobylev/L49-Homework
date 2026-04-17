@@ -14,52 +14,46 @@ from src.train import train_one_epoch, EarlyStopping
 from src.evaluate import evaluate
 import time
 import argparse
+import numpy as np
 
-def run_single_experiment(rnn_type, window_size, sentence_type, config_path="config/config.yaml"):
+def run_single_experiment(rnn_type, window_size, dataset_type, config_path="config/config.yaml"):
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
         
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Running experiment: {rnn_type}, window={window_size}, sentence={sentence_type}")
+    print(f"\nRunning experiment: {rnn_type}, window={window_size}, dataset={dataset_type}")
     
     # Data generation
     vocab_pools = generate_structured_vocabulary(config['data']['vocab_size'], config['data']['seed'])
     
-    if sentence_type == "short":
-        # Adjust grammar or pools if needed, but for now we just use the default structured gen
-        # and maybe filter by length if we wanted to be strict, but the prompt says 
-        # short is [5, 7] and long is [15, 20]. 
-        # Our generator produces sentences of variable length.
-        # Let's adjust num_sentences to match config.
-        sentences = generate_structured_sentences(vocab_pools, config['data']['num_sentences'], config['data']['seed'])
-        # Filter for short sentences
-        sentences = [s for s in sentences if config['data']['short_sentence_len'][0] <= len(s) <= config['data']['short_sentence_len'][1]]
+    if dataset_type == "short":
+        num_sentences = config['data']['num_sentences']
+        # The generator naturally produces sentences of length 3 or 4.
+        # Pattern: sub + verb + obj [+ mod]
+        sentences = generate_structured_sentences(vocab_pools, num_sentences, config['data']['seed'])
     else:
-        # For long sentences, we might need a more complex grammar or just repeat segments.
-        # For simplicity, let's just generate more and filter.
+        # Long sentences: we can concatenate multiple patterns or just repeat
+        # For simplicity, let's just generate a lot and join them to reach 15-20 words
+        num_sentences = config['data']['num_sentences']
+        raw_sentences = generate_structured_sentences(vocab_pools, num_sentences * 5, config['data']['seed'])
         sentences = []
-        while len(sentences) < config['data']['num_sentences'] // 10: # Long sentences are harder to get
-            raw = generate_structured_sentences(vocab_pools, 1000, config['data']['seed'] + len(sentences))
-            # Artificially lengthen by concatenating if needed, but let's try to just generate enough.
-            # Actually, let's just make the generator respect these lengths if possible.
-            # For now, I'll just accept what it generates.
-            sentences.extend(raw)
-        sentences = [s for s in sentences if config['data']['long_sentence_len'][0] <= len(s) <= config['data']['long_sentence_len'][1]]
-
-    if len(sentences) == 0:
-        print("Warning: No sentences matched length criteria. Using all generated.")
-        sentences = generate_structured_sentences(vocab_pools, config['data']['num_sentences'], config['data']['seed'])
+        for i in range(num_sentences):
+            long_s = []
+            while len(long_s) < 15:
+                long_s.extend(raw_sentences[i * 5 + len(long_s)//4])
+            sentences.append(long_s[:20]) # Limit to 20
 
     word2idx, idx2word = build_vocab_maps(vocab_pools)
     indexed_sentences = tokenize(sentences, word2idx)
     
-    # Split
-    train_size = int(config['data']['train_ratio'] * len(indexed_sentences))
-    val_size = int(config['data']['val_ratio'] * len(indexed_sentences))
-    test_size = len(indexed_sentences) - train_size - val_size
+    # Split 80/10/10
+    total = len(indexed_sentences)
+    train_size = int(config['data']['train_ratio'] * total)
+    val_size = int(config['data']['val_ratio'] * total)
+    test_size = total - train_size - val_size
     
     train_indices, val_indices, test_indices = random_split(
-        range(len(indexed_sentences)), [train_size, val_size, test_size],
+        range(total), [train_size, val_size, test_size],
         generator=torch.Generator().manual_seed(config['data']['seed'])
     )
     
@@ -93,40 +87,53 @@ def run_single_experiment(rnn_type, window_size, sentence_type, config_path="con
     history = {"train_loss": [], "val_loss": [], "val_acc": [], "grad_norms": []}
     
     best_val_loss = float('inf')
+    best_epoch = 0
     
     for epoch in range(1, config['training']['epochs'] + 1):
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device, config['training']['clip_grad_norm'], history["grad_norms"])
+        epoch_grad_norms = []
+        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device, config['training']['clip_grad_norm'], epoch_grad_norms)
         val_loss, val_acc, val_perp = evaluate(model, val_loader, criterion, device)
         
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
         history["val_acc"].append(val_acc)
+        history["grad_norms"].extend(epoch_grad_norms)
         
         print(f"Epoch {epoch}: Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}, Val Acc={val_acc:.4f}")
         
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), f"output/models/best_{rnn_type}_{window_size}_{sentence_type}.pt")
+            best_epoch = epoch
+            torch.save(model.state_dict(), f"output/models/best_{rnn_type.lower()}_model.pt")
             
         if early_stopping(val_loss):
             print("Early stopping triggered")
             break
             
-    # Final evaluation on test set
+    # Final evaluation on test set using BEST model
+    model.load_state_dict(torch.load(f"output/models/best_{rnn_type.lower()}_model.pt"))
     test_loss, test_acc, test_perp = evaluate(model, test_loader, criterion, device)
     
-    # Save results
+    random_baseline = np.log(len(word2idx))
+    grad_norm_mean = np.mean(history["grad_norms"]) if history["grad_norms"] else 0.0
+    
+    # Save result
     result = {
-        "rnn_type": rnn_type,
+        "model": rnn_type,
         "window_size": window_size,
-        "sentence_type": sentence_type,
+        "dataset_type": dataset_type,
+        "epoch": best_epoch,
+        "train_loss": history["train_loss"][best_epoch-1],
+        "val_loss": best_val_loss,
         "test_loss": test_loss,
-        "test_acc": test_acc,
+        "test_accuracy": test_acc,
         "perplexity": test_perp,
-        "num_params": model.count_params()
+        "random_baseline": random_baseline,
+        "gradient_norm_mean": grad_norm_mean
     }
     
     # Plotting
+    os.makedirs("output/plots", exist_ok=True)
     plt.figure(figsize=(12, 4))
     plt.subplot(1, 2, 1)
     plt.plot(history["train_loss"], label="Train Loss")
@@ -140,7 +147,7 @@ def run_single_experiment(rnn_type, window_size, sentence_type, config_path="con
     plt.legend()
     
     plt.tight_layout()
-    plt.savefig(f"output/plots/{rnn_type}_{window_size}_{sentence_type}.png")
+    plt.savefig(f"output/plots/{rnn_type}_{window_size}_{dataset_type}.png")
     plt.close()
     
     return result
@@ -149,8 +156,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--rnn_type", type=str, default="RNN")
     parser.add_argument("--window_size", type=int, default=1)
-    parser.add_argument("--sentence_type", type=str, default="short")
+    parser.add_argument("--dataset_type", type=str, default="short")
     args = parser.parse_args()
     
-    res = run_single_experiment(args.rnn_type, args.window_size, args.sentence_type)
+    res = run_single_experiment(args.rnn_type, args.window_size, args.dataset_type)
     print(res)
