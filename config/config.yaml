@@ -1,0 +1,23 @@
+data:
+  vocab_size: 10000
+  num_sentences: 100000
+  short_sentence_len: [5, 7]
+  long_sentence_len: [15, 20]
+  train_ratio: 0.8
+  val_ratio: 0.1
+  test_ratio: 0.1
+  seed: 42
+
+model:
+  embedding_dim: 64
+  hidden_dim: 128
+  num_layers: 1
+  dropout: 0.3
+  seed: 99
+
+training:
+  epochs: 15
+  batch_size: 64
+  learning_rate: 0.001
+  clip_grad_norm: 5.0
+  early_stopping_patience: 3
