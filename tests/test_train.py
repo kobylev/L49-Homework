@@ -22,7 +22,8 @@ def test_loss_decreases_over_epochs():
     
     inputs = torch.randint(1, vocab_size, (1, 5))
     targets = torch.tensor([10])
-    dataset = TensorDataset(inputs, targets)
+    s_lens = torch.tensor([5])
+    dataset = TensorDataset(inputs, targets, s_lens)
     loader = DataLoader(dataset, batch_size=1)
     
     initial_loss = train_one_epoch(model, loader, optimizer, criterion, torch.device("cpu"), 5.0)

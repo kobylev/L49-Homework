@@ -4,3 +4,4 @@ pandas
 matplotlib
 pytest
 pytest-timeout
+seaborn

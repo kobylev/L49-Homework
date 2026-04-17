@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 from src.model import NextWordModel
 import time
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 def train_one_epoch(model: NextWordModel,
                     loader: DataLoader,
@@ -11,11 +11,11 @@ def train_one_epoch(model: NextWordModel,
                     criterion: nn.Module,
                     device: torch.device,
                     grad_clip: float,
-                    step_grad_norms: Optional[List[float]] = None) -> float:
+                    layer_grad_norms: Optional[Dict[str, List[float]]] = None) -> float:
     model.train()
     total_loss, total_n = 0.0, 0
     
-    for inputs, targets in loader:
+    for inputs, targets, _ in loader:
         inputs, targets = inputs.to(device), targets.to(device)
         
         optimizer.zero_grad()
@@ -23,14 +23,19 @@ def train_one_epoch(model: NextWordModel,
         loss = criterion(logits, targets)
         loss.backward()
         
-        if step_grad_norms is not None:
-            total_norm = 0.0
-            for p in model.parameters():
-                if p.grad is not None:
-                    param_norm = p.grad.detach().data.norm(2)
-                    total_norm += param_norm.item() ** 2
-            total_norm = total_norm ** 0.5
-            step_grad_norms.append(total_norm)
+        if layer_grad_norms is not None:
+            # Track gradients for: embedding, rnn, fc
+            for name, param in model.named_parameters():
+                if param.grad is not None:
+                    layer_key = "other"
+                    if "embedding" in name: layer_key = "embedding"
+                    elif "rnn" in name: layer_key = "rnn"
+                    elif "fc" in name: layer_key = "fc"
+                    
+                    norm = param.grad.detach().data.norm(2).item()
+                    if layer_key not in layer_grad_norms:
+                        layer_grad_norms[layer_key] = []
+                    layer_grad_norms[layer_key].append(norm)
             
         nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
         optimizer.step()

@@ -5,10 +5,9 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 import pandas as pd
 import matplotlib.pyplot as plt
-from src.preprocessing import (generate_structured_vocabulary, 
-                               generate_structured_sentences, 
-                               build_vocab_maps, tokenize, PAD_TOKEN)
-from src.dataset import NextWordDataset
+import seaborn as sns
+from src.dataset import (generate_adult_dataset, 
+                         build_vocab_maps, tokenize, PAD_TOKEN, NextWordDataset)
 from src.model import NextWordModel
 from src.train import train_one_epoch, EarlyStopping
 from src.evaluate import evaluate
@@ -24,26 +23,14 @@ def run_single_experiment(rnn_type, window_size, dataset_type, config_path="conf
     print(f"\nRunning experiment: {rnn_type}, window={window_size}, dataset={dataset_type}")
     
     # Data generation
-    vocab_pools = generate_structured_vocabulary(config['data']['vocab_size'], config['data']['seed'])
+    short_corpus, long_corpus, all_words = generate_adult_dataset(config['data']['seed'])
     
     if dataset_type == "short":
-        num_sentences = config['data']['num_sentences']
-        # The generator naturally produces sentences of length 3 or 4.
-        # Pattern: sub + verb + obj [+ mod]
-        sentences = generate_structured_sentences(vocab_pools, num_sentences, config['data']['seed'])
+        sentences = short_corpus
     else:
-        # Long sentences: we can concatenate multiple patterns or just repeat
-        # For simplicity, let's just generate a lot and join them to reach 15-20 words
-        num_sentences = config['data']['num_sentences']
-        raw_sentences = generate_structured_sentences(vocab_pools, num_sentences * 5, config['data']['seed'])
-        sentences = []
-        for i in range(num_sentences):
-            long_s = []
-            while len(long_s) < 15:
-                long_s.extend(raw_sentences[i * 5 + len(long_s)//4])
-            sentences.append(long_s[:20]) # Limit to 20
+        sentences = long_corpus
 
-    word2idx, idx2word = build_vocab_maps(vocab_pools)
+    word2idx, idx2word = build_vocab_maps(all_words)
     indexed_sentences = tokenize(sentences, word2idx)
     
     # Split 80/10/10
@@ -84,38 +71,48 @@ def run_single_experiment(rnn_type, window_size, dataset_type, config_path="conf
     criterion = nn.CrossEntropyLoss(ignore_index=pad_idx)
     early_stopping = EarlyStopping(patience=config['training']['early_stopping_patience'])
     
-    history = {"train_loss": [], "val_loss": [], "val_acc": [], "grad_norms": []}
+    history = {"train_loss": [], "val_loss": [], "val_acc": [], "layer_grads": []}
     
     best_val_loss = float('inf')
     best_epoch = 0
     
     for epoch in range(1, config['training']['epochs'] + 1):
-        epoch_grad_norms = []
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device, config['training']['clip_grad_norm'], epoch_grad_norms)
-        val_loss, val_acc, val_perp = evaluate(model, val_loader, criterion, device)
+        epoch_layer_grads = {}
+        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device, 
+                                     config['training']['clip_grad_norm'], epoch_layer_grads)
+        val_loss, val_acc, val_perp, _ = evaluate(model, val_loader, criterion, device)
+        
+        # Average layer grads for the epoch
+        avg_epoch_grads = {k: np.mean(v) for k, v in epoch_layer_grads.items()}
+        history["layer_grads"].append(avg_epoch_grads)
         
         history["train_loss"].append(train_loss)
         history["val_loss"].append(val_loss)
         history["val_acc"].append(val_acc)
-        history["grad_norms"].extend(epoch_grad_norms)
         
         print(f"Epoch {epoch}: Train Loss={train_loss:.4f}, Val Loss={val_loss:.4f}, Val Acc={val_acc:.4f}")
         
         if val_loss < best_val_loss:
             best_val_loss = val_loss
             best_epoch = epoch
-            torch.save(model.state_dict(), f"output/models/best_{rnn_type.lower()}_model.pt")
+            torch.save(model.state_dict(), f"output/models/best_{rnn_type}_{window_size}_{dataset_type}.pt")
             
         if early_stopping(val_loss):
             print("Early stopping triggered")
             break
             
     # Final evaluation on test set using BEST model
-    model.load_state_dict(torch.load(f"output/models/best_{rnn_type.lower()}_model.pt"))
-    test_loss, test_acc, test_perp = evaluate(model, test_loader, criterion, device)
+    model.load_state_dict(torch.load(f"output/models/best_{rnn_type}_{window_size}_{dataset_type}.pt"))
+    test_loss, test_acc, test_perp, acc_by_len = evaluate(model, test_loader, criterion, device)
+    
+    # Save acc_by_len for Plot A
+    os.makedirs("output/stats", exist_ok=True)
+    pd.Series(acc_by_len).to_csv(f"output/stats/acc_by_len_{rnn_type}_{window_size}_{dataset_type}.csv")
+    
+    # Save layer grads for Plot B
+    pd.DataFrame(history["layer_grads"]).to_csv(f"output/stats/grads_{rnn_type}_{window_size}_{dataset_type}.csv")
     
     random_baseline = np.log(len(word2idx))
-    grad_norm_mean = np.mean(history["grad_norms"]) if history["grad_norms"] else 0.0
     
     # Save result
     result = {
@@ -128,22 +125,21 @@ def run_single_experiment(rnn_type, window_size, dataset_type, config_path="conf
         "test_loss": test_loss,
         "test_accuracy": test_acc,
         "perplexity": test_perp,
-        "random_baseline": random_baseline,
-        "gradient_norm_mean": grad_norm_mean
+        "random_baseline": random_baseline
     }
     
-    # Plotting
+    # Individual Plotting
     os.makedirs("output/plots", exist_ok=True)
     plt.figure(figsize=(12, 4))
     plt.subplot(1, 2, 1)
     plt.plot(history["train_loss"], label="Train Loss")
     plt.plot(history["val_loss"], label="Val Loss")
-    plt.title(f"{rnn_type} Window {window_size} - Loss")
+    plt.title(f"{rnn_type} W={window_size} {dataset_type} - Loss")
     plt.legend()
     
     plt.subplot(1, 2, 2)
     plt.plot(history["val_acc"], label="Val Acc")
-    plt.title(f"{rnn_type} Window {window_size} - Accuracy")
+    plt.title(f"{rnn_type} W={window_size} {dataset_type} - Accuracy")
     plt.legend()
     
     plt.tight_layout()
