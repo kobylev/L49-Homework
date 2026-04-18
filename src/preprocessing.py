@@ -4,6 +4,17 @@ from typing import List, Dict, Tuple
 PAD_TOKEN = "<PAD>"
 UNK_TOKEN = "<UNK>"
 
+import torch
+
+def to_one_hot(index: int, vocab_size: int) -> torch.Tensor:
+    """
+    Explicitly creates a one-hot vector for a given word index.
+    Note: nn.CrossEntropyLoss handles this internally for efficiency.
+    """
+    vec = torch.zeros(vocab_size)
+    vec[index] = 1.0
+    return vec
+
 def generate_structured_vocabulary(vocab_size: int, seed: int) -> Dict[str, List[str]]:
     rng = random.Random(seed)
     

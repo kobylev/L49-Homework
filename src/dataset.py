@@ -163,6 +163,10 @@ def build_vocab_maps(all_words: List[str]) -> Tuple[Dict[str, int], Dict[int, st
         word2idx[old_zero_word] = word2idx[PAD_TOKEN]
         word2idx[PAD_TOKEN] = 0
     idx2word = {i: w for w, i in word2idx.items()}
+    
+    print(f"Vocabulary size confirmed: {len(word2idx)} tokens")
+    assert len(word2idx) == 10000, f"Expected 10000 tokens, got {len(word2idx)}"
+    
     return word2idx, idx2word
 
 def tokenize(sentences: List[List[str]], word2idx: Dict[str, int]) -> List[List[int]]:
